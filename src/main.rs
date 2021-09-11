@@ -1,7 +1,6 @@
 use console_log::console_log;
 use image::{ImageBuffer, Luma};
 use std::io::Cursor;
-use wasm_bindgen::prelude::*;
 use web_sys::window;
 use yew::prelude::*;
 use yew::services::reader::ReaderTask;
@@ -79,7 +78,7 @@ impl Component for Model {
 
                 let original_bytes = encode_image_as_png_bytes(original_image);
 
-                let original_url = bytes_to_object_url(&original_bytes, "image/png".to_string());
+                let original_url = bytes_to_object_url(&original_bytes, "image/png").unwrap();
 
                 self.image_urls.push(("original".to_string(), original_url));
 
@@ -94,7 +93,7 @@ impl Component for Model {
 
                 let floyd_bytes = encode_image_as_png_bytes(floyd_steinberg_clone);
 
-                let floyd_url = bytes_to_object_url(&floyd_bytes, "image/png".to_string());
+                let floyd_url = bytes_to_object_url(&floyd_bytes, "image/png").unwrap();
                 console_log!("floyd done");
 
                 self.image_urls.push(("floyd".to_string(), floyd_url));
@@ -107,7 +106,7 @@ impl Component for Model {
 
                 let atkinson_bytes = encode_image_as_png_bytes(atkinson_clone);
 
-                let atkinson_url = bytes_to_object_url(&atkinson_bytes, "image/png".to_string());
+                let atkinson_url = bytes_to_object_url(&atkinson_bytes, "image/png").unwrap();
                 console_log!("atkinson done");
 
                 self.image_urls.push(("atkinson".to_string(), atkinson_url));
@@ -120,8 +119,7 @@ impl Component for Model {
 
                 let sierra_lite_bytes = encode_image_as_png_bytes(sierra_lite_clone);
 
-                let sierra_lite_url =
-                    bytes_to_object_url(&sierra_lite_bytes, "image/png".to_string());
+                let sierra_lite_url = bytes_to_object_url(&sierra_lite_bytes, "image/png").unwrap();
                 console_log!("sierra lite done");
 
                 self.image_urls
@@ -136,7 +134,7 @@ impl Component for Model {
 
                 let bayer_bytes = encode_image_as_png_bytes(bayer_clone);
 
-                let bayer_url = bytes_to_object_url(&bayer_bytes, "image/png".to_string());
+                let bayer_url = bytes_to_object_url(&bayer_bytes, "image/png").unwrap();
                 console_log!("bayer done");
 
                 self.image_urls.push(("bayer".to_string(), bayer_url));
@@ -153,7 +151,7 @@ impl Component for Model {
                 let random_threshold_bytes = encode_image_as_png_bytes(random_threshold_clone);
 
                 let random_threshold_url =
-                    bytes_to_object_url(&random_threshold_bytes, "image/png".to_string());
+                    bytes_to_object_url(&random_threshold_bytes, "image/png").unwrap();
                 console_log!("random threshold done");
 
                 self.image_urls
@@ -193,14 +191,16 @@ impl Component for Model {
 
                                 Msg::FileSelection(res)
                             }) />
-                <div>
+                <div style="padding: 0; margin: 0; display: flex; flex-wrap: wrap;">
                     {
                         for self.image_urls.iter().map(|(title, image_url)| {
                             html! {
-                                <div style="display: inline;">
-                                    <h3>{ title }</h3>
-                                    <a style="display: inline;" href={ image_url.to_string() } alt={"meh"}>{"download"}</a>
-                                    <img style="display: inline;" src={ image_url.to_string() } alt={"meh"} />
+                                <div style="flex: 1; margin-right: 10px;">
+                                    <div>
+                                        <a href={ image_url.to_string() } alt={ title.to_string() } download={ title.to_string() }>{ title }</a>
+                                    </div>
+
+                                    <img src={ image_url.to_string() } alt={"meh"} />
                                 </div>
                             }
                         })
@@ -226,39 +226,19 @@ fn encode_image_as_png_bytes(image: ImageBuffer<Luma<u8>, Vec<u8>>) -> Vec<u8> {
     w.into_inner()
 }
 
-// fn bytes_to_object_url(slice: &[u8], mime_type: &str) -> Result<String, wasm_bindgen::JsValue> {
-//     // export function bytes_to_object_url(slice, mimeType) {
-//     //   const blob = new Blob([slice], { type: mimeType });
-//     //   const imageUrl = URL.createObjectURL(blob);
-//     //   return imageUrl;
-//     // }
-//
-//     let mut blob_properties = web_sys::BlobPropertyBag::new();
-//     blob_properties.type_(mime_type);
-//
-//     let len = slice.len() as f64;
-//     let len = JsValue::from_f64(len);
-//     // let bytearray = js_sys::Uint8Array::new(&len);
-//     let bytearray = slice_to_js_array(slice);
-//
-//     let blob =
-//         web_sys::Blob::new_with_buffer_source_sequence_and_options(&bytearray, &blob_properties)?;
-//
-//     web_sys::Url::create_object_url_with_blob(&blob)
-// }
-//
-// fn slice_to_js_array(slice: &[u8]) -> js_sys::Array {
-//     slice.iter().copied().map(JsValue::from).collect()
-// }
+fn bytes_to_object_url(slice: &[u8], mime_type: &str) -> Result<String, wasm_bindgen::JsValue> {
+    let mut blob_properties = web_sys::BlobPropertyBag::new();
 
-/// The types we use in this app are:
-/// image/png, image/svg+xml, and application/zip
-#[wasm_bindgen(module = "/static/js/utils.js")]
-extern "C" {
-    fn bytes_to_object_url(
-        bytes: &[u8],
-        #[wasm_bindgen(js_name = mimeType)] mime_type: String,
-    ) -> String;
+    blob_properties.type_(mime_type);
+
+    let bytearray = js_sys::Uint8Array::from(slice);
+
+    let blob = web_sys::Blob::new_with_blob_sequence_and_options(
+        &js_sys::Array::of1(&bytearray),
+        &blob_properties,
+    )?;
+
+    web_sys::Url::create_object_url_with_blob(&blob)
 }
 
 fn main() {
