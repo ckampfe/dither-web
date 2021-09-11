@@ -1,5 +1,5 @@
 use console_log::console_log;
-use image::{ImageBuffer, Luma};
+use image::{GenericImageView, ImageBuffer, Luma};
 use std::io::Cursor;
 use web_sys::window;
 use yew::prelude::*;
@@ -8,7 +8,6 @@ use yew::services::{reader::FileData, ReaderService};
 use yew::web_sys::File;
 
 enum Msg {
-    AddOne,
     FileSelection(Vec<File>),
     FileLoaded(FileData),
 }
@@ -17,7 +16,6 @@ struct Model {
     // `ComponentLink` is like a reference to a component.
     // It can be used to send messages to the component
     link: ComponentLink<Self>,
-    value: i64,
     image_urls: Vec<(String, String)>,
     tasks: Vec<ReaderTask>,
 }
@@ -29,7 +27,6 @@ impl Component for Model {
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
             link,
-            value: 0,
             image_urls: vec![],
             tasks: vec![],
         }
@@ -37,12 +34,6 @@ impl Component for Model {
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
-            Msg::AddOne => {
-                self.value += 1;
-                // the value has changed so we need to
-                // re-render for it to appear on the page
-                true
-            }
             Msg::FileSelection(files) => {
                 for file in files {
                     let performance = window().unwrap().performance().unwrap();
@@ -63,6 +54,11 @@ impl Component for Model {
                 console_log!("finished loading image: {}", &file.name);
 
                 let original_image = image::load_from_memory(&file.content).unwrap();
+                console_log!(
+                    "width, height",
+                    original_image.width(),
+                    original_image.height()
+                );
                 let luma_clone = original_image.to_luma8();
                 let mut floyd_steinberg_clone = luma_clone.clone();
                 let mut atkinson_clone = luma_clone.clone();
@@ -83,7 +79,7 @@ impl Component for Model {
                 self.image_urls.push(("original".to_string(), original_url));
 
                 ///////////////////////////////////////////
-                // Floyd-Steinberg dithering
+
                 console_log!("floyd start");
                 let floyd_start = performance.now();
                 dither::dither_floyd_steinberg(
@@ -99,7 +95,9 @@ impl Component for Model {
                 self.image_urls.push(("floyd".to_string(), floyd_url));
                 let floyd_end = performance.now();
                 console_log!("floyd end: {}", floyd_end - floyd_start);
+
                 ///////////////////////////////////////////
+
                 console_log!("atkinson start");
                 let atkinson_start = performance.now();
                 dither::dither_atkinson(&mut atkinson_clone, &image::imageops::BiLevel);
@@ -112,7 +110,9 @@ impl Component for Model {
                 self.image_urls.push(("atkinson".to_string(), atkinson_url));
                 let atkinson_end = performance.now();
                 console_log!("atkinson end: {}", atkinson_end - atkinson_start);
+
                 ///////////////////////////////////////////
+
                 console_log!("sierra lite start");
                 let sierra_lite_start = performance.now();
                 dither::dither_sierra_lite(&mut sierra_lite_clone, &image::imageops::BiLevel);
@@ -126,8 +126,9 @@ impl Component for Model {
                     .push(("sierra lite".to_string(), sierra_lite_url));
                 let sierra_lite_end = performance.now();
                 console_log!("sierra lite end: {}", sierra_lite_end - sierra_lite_start);
+
                 ///////////////////////////////////////////
-                ///////////////////////////////////////////
+
                 console_log!("bayer start");
                 let bayer_start = performance.now();
                 dither::dither_bayer(&mut bayer_clone, &image::imageops::BiLevel);
@@ -140,7 +141,9 @@ impl Component for Model {
                 self.image_urls.push(("bayer".to_string(), bayer_url));
                 let bayer_end = performance.now();
                 console_log!("bayer end: {}", bayer_end - bayer_start);
+
                 ///////////////////////////////////////////
+
                 console_log!("random threshold start");
                 let random_threshold_start = performance.now();
                 dither::dither_random_threshold(
@@ -161,6 +164,7 @@ impl Component for Model {
                     "random threshold end: {}",
                     random_threshold_end - random_threshold_start
                 );
+
                 ///////////////////////////////////////////
 
                 true
@@ -178,8 +182,6 @@ impl Component for Model {
     fn view(&self) -> Html {
         html! {
             <div>
-                <button onclick=self.link.callback(|_| Msg::AddOne)>{ "+1" }</button>
-                <p>{ self.value }</p>
                 <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
                                 let mut res = vec![];
 
