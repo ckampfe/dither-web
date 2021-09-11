@@ -66,7 +66,10 @@ impl Component for Model {
                 let original_image = image::load_from_memory(&file.content).unwrap();
                 let luma_clone = original_image.to_luma8();
                 let mut floyd_steinberg_clone = luma_clone.clone();
-                let mut atkinson_clone = luma_clone;
+                let mut atkinson_clone = luma_clone.clone();
+                let mut sierra_lite_clone = luma_clone.clone();
+                let mut bayer_clone = luma_clone.clone();
+                let mut random_threshold_clone = luma_clone;
                 let load_end = performance.now();
                 console_log!("load end: {}", load_end - load_start);
 
@@ -110,6 +113,56 @@ impl Component for Model {
                 self.image_urls.push(("atkinson".to_string(), atkinson_url));
                 let atkinson_end = performance.now();
                 console_log!("atkinson end: {}", atkinson_end - atkinson_start);
+                ///////////////////////////////////////////
+                console_log!("sierra lite start");
+                let sierra_lite_start = performance.now();
+                dither::dither_sierra_lite(&mut sierra_lite_clone, &image::imageops::BiLevel);
+
+                let sierra_lite_bytes = encode_image_as_png_bytes(sierra_lite_clone);
+
+                let sierra_lite_url =
+                    bytes_to_object_url(&sierra_lite_bytes, "image/png".to_string());
+                console_log!("sierra lite done");
+
+                self.image_urls
+                    .push(("sierra lite".to_string(), sierra_lite_url));
+                let sierra_lite_end = performance.now();
+                console_log!("sierra lite end: {}", sierra_lite_end - sierra_lite_start);
+                ///////////////////////////////////////////
+                ///////////////////////////////////////////
+                console_log!("bayer start");
+                let bayer_start = performance.now();
+                dither::dither_bayer(&mut bayer_clone, &image::imageops::BiLevel);
+
+                let bayer_bytes = encode_image_as_png_bytes(bayer_clone);
+
+                let bayer_url = bytes_to_object_url(&bayer_bytes, "image/png".to_string());
+                console_log!("bayer done");
+
+                self.image_urls.push(("bayer".to_string(), bayer_url));
+                let bayer_end = performance.now();
+                console_log!("bayer end: {}", bayer_end - bayer_start);
+                ///////////////////////////////////////////
+                console_log!("random threshold start");
+                let random_threshold_start = performance.now();
+                dither::dither_random_threshold(
+                    &mut random_threshold_clone,
+                    &image::imageops::BiLevel,
+                );
+
+                let random_threshold_bytes = encode_image_as_png_bytes(random_threshold_clone);
+
+                let random_threshold_url =
+                    bytes_to_object_url(&random_threshold_bytes, "image/png".to_string());
+                console_log!("random threshold done");
+
+                self.image_urls
+                    .push(("random threshold".to_string(), random_threshold_url));
+                let random_threshold_end = performance.now();
+                console_log!(
+                    "random threshold end: {}",
+                    random_threshold_end - random_threshold_start
+                );
                 ///////////////////////////////////////////
 
                 true
