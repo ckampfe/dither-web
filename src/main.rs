@@ -92,7 +92,8 @@ impl Component for Model {
                 let floyd_url = bytes_to_object_url(&floyd_bytes, "image/png").unwrap();
                 console_log!("floyd done");
 
-                self.image_urls.push(("floyd".to_string(), floyd_url));
+                self.image_urls
+                    .push(("floyd-steinberg".to_string(), floyd_url));
                 let floyd_end = performance.now();
                 console_log!("floyd end: {}", floyd_end - floyd_start);
 
