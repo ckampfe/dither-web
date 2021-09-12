@@ -1,11 +1,13 @@
 use console_log::console_log;
-use image::{GenericImageView, ImageBuffer, Luma};
+use image::{ImageBuffer, Luma};
 use std::io::Cursor;
 use web_sys::window;
 use yew::prelude::*;
 use yew::services::reader::ReaderTask;
 use yew::services::{reader::FileData, ReaderService};
 use yew::web_sys::File;
+
+const IMAGE_PNG_MIME_TYPE: &str = "image/png";
 
 enum Msg {
     FileSelection(Vec<File>),
@@ -16,7 +18,7 @@ struct Model {
     // `ComponentLink` is like a reference to a component.
     // It can be used to send messages to the component
     link: ComponentLink<Self>,
-    image_urls: Vec<(String, String)>,
+    image_urls: Vec<(String, String, f64)>,
     tasks: Vec<ReaderTask>,
 }
 
@@ -49,124 +51,157 @@ impl Component for Model {
             }
             Msg::FileLoaded(file) => {
                 let performance = window().unwrap().performance().unwrap();
+                let all_start = performance.now();
 
                 let load_start = performance.now();
                 console_log!("finished loading image: {}", &file.name);
 
-                let original_image = image::load_from_memory(&file.content).unwrap();
+                let original_image = image::load_from_memory(&file.content).unwrap().to_luma8();
                 console_log!(
                     "width, height",
                     original_image.width(),
                     original_image.height()
                 );
-                let luma_clone = original_image.to_luma8();
-                let mut floyd_steinberg_clone = luma_clone.clone();
-                let mut atkinson_clone = luma_clone.clone();
-                let mut sierra_lite_clone = luma_clone.clone();
-                let mut bayer_clone = luma_clone.clone();
-                let mut random_threshold_clone = luma_clone;
+                // let mut floyd_steinberg_clone = working_image.clone();
+                // let mut atkinson_clone = working_image.clone();
+                // let mut sierra_lite_clone = working_image.clone();
+                // let mut bayer_clone = working_image.clone();
+                // let mut random_threshold_clone = working_image;
                 let load_end = performance.now();
                 console_log!("load end: {}", load_end - load_start);
 
                 ///////////////////////////////////////////
 
-                let original_image = original_image.to_luma8();
+                console_log!("original image len", original_image.len());
 
-                let original_bytes = encode_image_as_png_bytes(original_image);
+                let original_bytes = encode_image_as_png_bytes(&original_image);
+                console_log!("original bytes len", original_bytes.len());
 
-                let original_url = bytes_to_object_url(&original_bytes, "image/png").unwrap();
+                let original_url =
+                    bytes_to_object_url(&original_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
 
-                self.image_urls.push(("original".to_string(), original_url));
+                self.image_urls
+                    .push(("original".to_string(), original_url, 0.0));
 
                 ///////////////////////////////////////////
 
+                // This ImageBuffer is reused by all dither functions.
+                // All dither functions must fill it with a clone of the original image
+                // prior to use.
+                //
+                // This is an optimization to avoid allocating a separate buffer
+                // for every dither.
+                let mut working_image = original_image.clone();
+
                 console_log!("floyd start");
                 let floyd_start = performance.now();
-                dither::dither_floyd_steinberg(
-                    &mut floyd_steinberg_clone,
-                    &image::imageops::BiLevel,
-                );
+                dither::dither_floyd_steinberg(&mut working_image, &image::imageops::BiLevel);
 
-                let floyd_bytes = encode_image_as_png_bytes(floyd_steinberg_clone);
+                let floyd_bytes = encode_image_as_png_bytes(&working_image);
 
-                let floyd_url = bytes_to_object_url(&floyd_bytes, "image/png").unwrap();
+                let floyd_url = bytes_to_object_url(&floyd_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
                 console_log!("floyd done");
 
-                self.image_urls
-                    .push(("floyd-steinberg".to_string(), floyd_url));
                 let floyd_end = performance.now();
+                self.image_urls.push((
+                    "Floyd-Steinberg".to_string(),
+                    floyd_url,
+                    floyd_end - floyd_start,
+                ));
                 console_log!("floyd end: {}", floyd_end - floyd_start);
 
                 ///////////////////////////////////////////
 
+                working_image = original_image.clone();
+
                 console_log!("atkinson start");
                 let atkinson_start = performance.now();
-                dither::dither_atkinson(&mut atkinson_clone, &image::imageops::BiLevel);
+                dither::dither_atkinson(&mut working_image, &image::imageops::BiLevel);
 
-                let atkinson_bytes = encode_image_as_png_bytes(atkinson_clone);
+                let atkinson_bytes = encode_image_as_png_bytes(&working_image);
 
-                let atkinson_url = bytes_to_object_url(&atkinson_bytes, "image/png").unwrap();
+                let atkinson_url =
+                    bytes_to_object_url(&atkinson_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
                 console_log!("atkinson done");
 
-                self.image_urls.push(("atkinson".to_string(), atkinson_url));
                 let atkinson_end = performance.now();
+                self.image_urls.push((
+                    "Atkinson".to_string(),
+                    atkinson_url,
+                    atkinson_end - atkinson_start,
+                ));
                 console_log!("atkinson end: {}", atkinson_end - atkinson_start);
 
                 ///////////////////////////////////////////
 
+                working_image = original_image.clone();
+
                 console_log!("sierra lite start");
                 let sierra_lite_start = performance.now();
-                dither::dither_sierra_lite(&mut sierra_lite_clone, &image::imageops::BiLevel);
+                dither::dither_sierra_lite(&mut working_image, &image::imageops::BiLevel);
 
-                let sierra_lite_bytes = encode_image_as_png_bytes(sierra_lite_clone);
+                let sierra_lite_bytes = encode_image_as_png_bytes(&working_image);
 
-                let sierra_lite_url = bytes_to_object_url(&sierra_lite_bytes, "image/png").unwrap();
+                let sierra_lite_url =
+                    bytes_to_object_url(&sierra_lite_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
                 console_log!("sierra lite done");
 
-                self.image_urls
-                    .push(("sierra lite".to_string(), sierra_lite_url));
                 let sierra_lite_end = performance.now();
+                self.image_urls.push((
+                    "Sierra Lite".to_string(),
+                    sierra_lite_url,
+                    sierra_lite_end - sierra_lite_start,
+                ));
                 console_log!("sierra lite end: {}", sierra_lite_end - sierra_lite_start);
 
                 ///////////////////////////////////////////
 
+                working_image = original_image.clone();
+
                 console_log!("bayer start");
                 let bayer_start = performance.now();
-                dither::dither_bayer(&mut bayer_clone, &image::imageops::BiLevel);
+                dither::dither_bayer(&mut working_image, &image::imageops::BiLevel);
 
-                let bayer_bytes = encode_image_as_png_bytes(bayer_clone);
+                let bayer_bytes = encode_image_as_png_bytes(&working_image);
 
-                let bayer_url = bytes_to_object_url(&bayer_bytes, "image/png").unwrap();
+                let bayer_url = bytes_to_object_url(&bayer_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
                 console_log!("bayer done");
 
-                self.image_urls.push(("bayer".to_string(), bayer_url));
                 let bayer_end = performance.now();
+                self.image_urls
+                    .push(("Bayer".to_string(), bayer_url, bayer_end - bayer_start));
                 console_log!("bayer end: {}", bayer_end - bayer_start);
 
                 ///////////////////////////////////////////
 
+                working_image = original_image;
+
                 console_log!("random threshold start");
                 let random_threshold_start = performance.now();
-                dither::dither_random_threshold(
-                    &mut random_threshold_clone,
-                    &image::imageops::BiLevel,
-                );
+                dither::dither_random_threshold(&mut working_image, &image::imageops::BiLevel);
 
-                let random_threshold_bytes = encode_image_as_png_bytes(random_threshold_clone);
+                let random_threshold_bytes = encode_image_as_png_bytes(&working_image);
 
                 let random_threshold_url =
-                    bytes_to_object_url(&random_threshold_bytes, "image/png").unwrap();
-                console_log!("random threshold done");
+                    bytes_to_object_url(&random_threshold_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
+                console_log!("Random threshold done");
 
-                self.image_urls
-                    .push(("random threshold".to_string(), random_threshold_url));
                 let random_threshold_end = performance.now();
+                self.image_urls.push((
+                    "random threshold".to_string(),
+                    random_threshold_url,
+                    random_threshold_end - random_threshold_start,
+                ));
                 console_log!(
                     "random threshold end: {}",
                     random_threshold_end - random_threshold_start
                 );
 
                 ///////////////////////////////////////////
+
+                let all_end = performance.now();
+
+                console_log!("all time", all_end - all_start);
 
                 true
             }
@@ -196,12 +231,14 @@ impl Component for Model {
                             }) />
                 <div style="padding: 0; margin: 0; display: flex; flex-wrap: wrap;">
                     {
-                        for self.image_urls.iter().map(|(title, image_url)| {
+                        for self.image_urls.iter().map(|(title, image_url, dither_ms)| {
                             html! {
                                 <div style="flex: 1; margin-right: 10px;">
                                     <div>
                                         <a href={ image_url.to_string() } alt={ title.to_string() } download={ title.to_string() }>{ title }</a>
                                     </div>
+
+                                    <div>{ format!("Time taken: {}ms", dither_ms) }</div>
 
                                     <img src={ image_url.to_string() } alt={"meh"} />
                                 </div>
@@ -214,16 +251,16 @@ impl Component for Model {
     }
 }
 
-fn encode_image_as_png_bytes(image: ImageBuffer<Luma<u8>, Vec<u8>>) -> Vec<u8> {
+fn encode_image_as_png_bytes(image: &ImageBuffer<Luma<u8>, Vec<u8>>) -> Vec<u8> {
     let (x, y) = image.dimensions();
 
     let mut w = Cursor::new(Vec::new());
     let as_png = image::png::PngEncoder::new(&mut w);
 
-    let page_as_bytes = image.into_raw();
+    let page_as_bytes = image.as_ref();
 
     as_png
-        .encode(&page_as_bytes, x, y, image::ColorType::L8)
+        .encode(page_as_bytes, x, y, image::ColorType::L8)
         .unwrap();
 
     w.into_inner()
