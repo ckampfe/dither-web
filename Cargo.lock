@@ -141,6 +141,7 @@ dependencies = [
 [[package]]
 name = "dither"
 version = "0.1.0"
+source = "git+https://github.com/ckampfe/dither.git#c3a539303bcd6079bcb2d2c9848f5f5f03809e4b"
 dependencies = [
  "getrandom",
  "image",

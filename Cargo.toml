@@ -7,7 +7,8 @@ edition = "2018"
 
 [dependencies]
 console_log = { git = "https://github.com/ckampfe/console_log.git" }
-dither = { path = "/home/clark/code/personal/dither" }
+# dither = { path = "/home/clark/code/personal/dither" }
+dither = { git = "https://github.com/ckampfe/dither.git" }
 js-sys = "0.3.54"
 wasm-bindgen = "0.2.77"
 web-sys = { version = "0.3.54", features = ["Performance"] }
