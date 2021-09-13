@@ -7,6 +7,7 @@ use yew::services::reader::ReaderTask;
 use yew::services::{reader::FileData, ReaderService};
 use yew::web_sys::File;
 
+const VERSION: &str = env!("DITHER_WEB_VERSION");
 const IMAGE_PNG_MIME_TYPE: &str = "image/png";
 
 enum Msg {
@@ -218,6 +219,9 @@ impl Component for Model {
     fn view(&self) -> Html {
         html! {
             <div>
+                <div>
+                    <a href="https://github.com/ckampfe/dither-web">{ format!("source code version {}", VERSION) }</a>
+                </div>
                 <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
                                 let mut res = vec![];
 
