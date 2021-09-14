@@ -1,5 +1,6 @@
 use console_log::console_log;
-use image::{ImageBuffer, Luma};
+use image::imageops::ColorMap;
+use image::{ImageBuffer, Pixel};
 use std::io::Cursor;
 use web_sys::window;
 use yew::prelude::*;
@@ -52,7 +53,20 @@ impl Component for Model {
             }
             Msg::FileLoaded(file) => {
                 let performance = window().unwrap().performance().unwrap();
+
                 let all_start = performance.now();
+
+                ///////////////////////////////////////////
+
+                self.tasks.clear();
+
+                for (_title, url, _processing_time_ms) in &self.image_urls {
+                    let _ = web_sys::Url::revoke_object_url(url);
+                }
+
+                self.image_urls.clear();
+
+                ///////////////////////////////////////////
 
                 let load_start = performance.now();
                 console_log!("finished loading image: {}", &file.name);
@@ -63,11 +77,7 @@ impl Component for Model {
                     original_image.width(),
                     original_image.height()
                 );
-                // let mut floyd_steinberg_clone = working_image.clone();
-                // let mut atkinson_clone = working_image.clone();
-                // let mut sierra_lite_clone = working_image.clone();
-                // let mut bayer_clone = working_image.clone();
-                // let mut random_threshold_clone = working_image;
+
                 let load_end = performance.now();
                 console_log!("load end: {}", load_end - load_start);
 
@@ -82,127 +92,19 @@ impl Component for Model {
                     bytes_to_object_url(&original_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
 
                 self.image_urls
-                    .push(("original".to_string(), original_url, 0.0));
+                    .push(("Original image".to_string(), original_url, 0.0));
 
                 ///////////////////////////////////////////
 
-                // This ImageBuffer is reused by all dither functions.
-                // All dither functions must fill it with a clone of the original image
-                // prior to use.
-                //
-                // This is an optimization to avoid allocating a separate buffer
-                // for every dither.
-                let mut working_image = original_image.clone();
+                let dithers = all_dithers(&original_image, &image::imageops::BiLevel);
 
-                console_log!("floyd start");
-                let floyd_start = performance.now();
-                dither::dither_floyd_steinberg(&mut working_image, &image::imageops::BiLevel);
-
-                let floyd_bytes = encode_image_as_png_bytes(&working_image);
-
-                let floyd_url = bytes_to_object_url(&floyd_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
-                console_log!("floyd done");
-
-                let floyd_end = performance.now();
-                self.image_urls.push((
-                    "Floyd-Steinberg".to_string(),
-                    floyd_url,
-                    floyd_end - floyd_start,
-                ));
-                console_log!("floyd end: {}", floyd_end - floyd_start);
-
-                ///////////////////////////////////////////
-
-                working_image = original_image.clone();
-
-                console_log!("atkinson start");
-                let atkinson_start = performance.now();
-                dither::dither_atkinson(&mut working_image, &image::imageops::BiLevel);
-
-                let atkinson_bytes = encode_image_as_png_bytes(&working_image);
-
-                let atkinson_url =
-                    bytes_to_object_url(&atkinson_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
-                console_log!("atkinson done");
-
-                let atkinson_end = performance.now();
-                self.image_urls.push((
-                    "Atkinson".to_string(),
-                    atkinson_url,
-                    atkinson_end - atkinson_start,
-                ));
-                console_log!("atkinson end: {}", atkinson_end - atkinson_start);
-
-                ///////////////////////////////////////////
-
-                working_image = original_image.clone();
-
-                console_log!("sierra lite start");
-                let sierra_lite_start = performance.now();
-                dither::dither_sierra_lite(&mut working_image, &image::imageops::BiLevel);
-
-                let sierra_lite_bytes = encode_image_as_png_bytes(&working_image);
-
-                let sierra_lite_url =
-                    bytes_to_object_url(&sierra_lite_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
-                console_log!("sierra lite done");
-
-                let sierra_lite_end = performance.now();
-                self.image_urls.push((
-                    "Sierra Lite".to_string(),
-                    sierra_lite_url,
-                    sierra_lite_end - sierra_lite_start,
-                ));
-                console_log!("sierra lite end: {}", sierra_lite_end - sierra_lite_start);
-
-                ///////////////////////////////////////////
-
-                working_image = original_image.clone();
-
-                console_log!("bayer start");
-                let bayer_start = performance.now();
-                dither::dither_bayer(&mut working_image, &image::imageops::BiLevel);
-
-                let bayer_bytes = encode_image_as_png_bytes(&working_image);
-
-                let bayer_url = bytes_to_object_url(&bayer_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
-                console_log!("bayer done");
-
-                let bayer_end = performance.now();
-                self.image_urls
-                    .push(("Bayer".to_string(), bayer_url, bayer_end - bayer_start));
-                console_log!("bayer end: {}", bayer_end - bayer_start);
-
-                ///////////////////////////////////////////
-
-                working_image = original_image;
-
-                console_log!("random threshold start");
-                let random_threshold_start = performance.now();
-                dither::dither_random_threshold(&mut working_image, &image::imageops::BiLevel);
-
-                let random_threshold_bytes = encode_image_as_png_bytes(&working_image);
-
-                let random_threshold_url =
-                    bytes_to_object_url(&random_threshold_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
-                console_log!("Random threshold done");
-
-                let random_threshold_end = performance.now();
-                self.image_urls.push((
-                    "random threshold".to_string(),
-                    random_threshold_url,
-                    random_threshold_end - random_threshold_start,
-                ));
-                console_log!(
-                    "random threshold end: {}",
-                    random_threshold_end - random_threshold_start
-                );
-
-                ///////////////////////////////////////////
+                self.image_urls.extend_from_slice(&dithers);
 
                 let all_end = performance.now();
 
                 console_log!("all time", all_end - all_start);
+
+                ///////////////////////////////////////////
 
                 true
             }
@@ -255,7 +157,68 @@ impl Component for Model {
     }
 }
 
-fn encode_image_as_png_bytes(image: &ImageBuffer<Luma<u8>, Vec<u8>>) -> Vec<u8> {
+pub fn all_dithers<Pix, Map>(
+    image: &ImageBuffer<Pix, Vec<u8>>,
+    color_map: &Map,
+) -> Vec<(String, String, f64)>
+where
+    Map: ColorMap<Color = Pix> + ?Sized,
+    Pix: Pixel<Subpixel = u8> + 'static,
+{
+    let performance = window().unwrap().performance().unwrap();
+    let mut working_image = image.clone();
+
+    [
+        (
+            "Floyd-Steinberg",
+            Box::new(dither::dither_floyd_steinberg)
+                as Box<dyn FnMut(&mut ImageBuffer<Pix, Vec<u8>>, &Map)>,
+        ),
+        (
+            "Atkinson",
+            Box::new(dither::dither_atkinson)
+                as Box<dyn FnMut(&mut ImageBuffer<Pix, Vec<u8>>, &Map)>,
+        ),
+        (
+            "Sierra Lite",
+            Box::new(dither::dither_sierra_lite)
+                as Box<dyn FnMut(&mut ImageBuffer<Pix, Vec<u8>>, &Map)>,
+        ),
+        (
+            "Bayer",
+            Box::new(dither::dither_bayer) as Box<dyn FnMut(&mut ImageBuffer<Pix, Vec<u8>>, &Map)>,
+        ),
+        (
+            "Random threshold",
+            Box::new(dither::dither_random_threshold)
+                as Box<dyn FnMut(&mut ImageBuffer<Pix, Vec<u8>>, &Map)>,
+        ),
+    ]
+    .iter_mut()
+    .map(|(title, f)| {
+        let start = performance.now();
+
+        working_image = image.clone();
+
+        f(&mut working_image, color_map);
+
+        let png_bytes = encode_image_as_png_bytes(&working_image);
+
+        let dithered_image_url = bytes_to_object_url(&png_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
+
+        let end = performance.now();
+
+        console_log!((*title), "time", end - start);
+
+        (title.to_string(), dithered_image_url, end - start)
+    })
+    .collect()
+}
+
+fn encode_image_as_png_bytes<Pix>(image: &ImageBuffer<Pix, Vec<u8>>) -> Vec<u8>
+where
+    Pix: Pixel<Subpixel = u8> + 'static,
+{
     let (x, y) = image.dimensions();
 
     let mut w = Cursor::new(Vec::new());
