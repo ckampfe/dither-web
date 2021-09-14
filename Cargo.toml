@@ -6,6 +6,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1"
 console_log = { git = "https://github.com/ckampfe/console_log.git" }
 # dither = { path = "/home/clark/code/personal/dither" }
 dither = { git = "https://github.com/ckampfe/dither.git" }

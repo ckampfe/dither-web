@@ -3,8 +3,11 @@ use image::imageops::ColorMap;
 use image::{ImageBuffer, Pixel};
 use std::io::Cursor;
 use web_sys::window;
+use yew::format::Nothing;
 use yew::prelude::*;
+use yew::services::fetch::{FetchTask, Request, Response};
 use yew::services::reader::ReaderTask;
+use yew::services::FetchService;
 use yew::services::{reader::FileData, ReaderService};
 use yew::web_sys::File;
 
@@ -12,6 +15,8 @@ const VERSION: &str = env!("DITHER_WEB_VERSION");
 const IMAGE_PNG_MIME_TYPE: &str = "image/png";
 
 enum Msg {
+    Demo,
+    FetchReady(Result<Vec<u8>, anyhow::Error>),
     FileSelection(Vec<File>),
     FileLoaded(FileData),
 }
@@ -22,6 +27,7 @@ struct Model {
     link: ComponentLink<Self>,
     image_urls: Vec<(String, String, f64)>,
     tasks: Vec<ReaderTask>,
+    fetch_task: Option<FetchTask>,
 }
 
 impl Component for Model {
@@ -33,11 +39,57 @@ impl Component for Model {
             link,
             image_urls: vec![],
             tasks: vec![],
+            fetch_task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
+            Msg::Demo => {
+                let callback = self.link.batch_callback(
+                    move |response: Response<Result<Vec<u8>, anyhow::Error>>| {
+                        let (meta, data) = response.into_parts();
+                        if meta.status.is_success() {
+                            Some(Msg::FetchReady(data))
+                        } else {
+                            console_log!("demo resp status: ", meta.status.as_str());
+                            None // FIXME: Handle this error accordingly.
+                        }
+                    },
+                );
+                let request = Request::get("/earthmoon.jpg").body(Nothing).unwrap();
+                let task = FetchService::fetch_binary(request, callback).unwrap();
+                self.fetch_task = Some(task);
+
+                false
+            }
+            Msg::FetchReady(response) => {
+                self.fetch_task = None;
+                self.tasks.clear();
+                self.image_urls.clear();
+
+                let image_data = response.unwrap();
+
+                let image =
+                    image::load_from_memory_with_format(&image_data, image::ImageFormat::Jpeg)
+                        .unwrap();
+
+                let image_data = image.to_luma8();
+
+                let dithers = all_dithers(&image_data, &image::imageops::BiLevel);
+
+                let original_bytes = encode_image_as_png_bytes(&image_data);
+
+                let original_url =
+                    bytes_to_object_url(&original_bytes, IMAGE_PNG_MIME_TYPE).unwrap();
+
+                self.image_urls
+                    .push(("Original image".to_string(), original_url, 0.0));
+
+                self.image_urls.extend_from_slice(&dithers);
+
+                true
+            }
             Msg::FileSelection(files) => {
                 for file in files {
                     let performance = window().unwrap().performance().unwrap();
@@ -135,6 +187,9 @@ impl Component for Model {
 
                                 Msg::FileSelection(res)
                             }) />
+                <button onclick=self.link.callback(move |_e| {
+                    Msg::Demo
+                })>{ "Demo" }</button>
                 <div style="padding: 0; margin: 0; display: flex; flex-wrap: wrap;">
                     {
                         for self.image_urls.iter().map(|(title, image_url, dither_ms)| {

@@ -152,6 +152,7 @@ dependencies = [
 name = "dither-web"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "console_log",
  "dither",
  "image",
